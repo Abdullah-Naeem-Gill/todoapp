@@ -1,9 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI, Depends, HTTPException
 from sqlmodel import Session, select
-from auth import hash_password, create_access_token, verify_password, oauth2_scheme, verify_token
 from models import User
 from database import get_db, init_db
+from routers import admin, user, task
 
 app = FastAPI()
 
@@ -18,30 +17,36 @@ async def signup(username: str, password: str, db: Session = Depends(get_db)):
     if existing_user.first():
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    new_user = User(username=username, hashed_password=hash_password(password))
+
+    new_user = User(username=username, hashed_password=password)  
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    return {"msg": "User created successfully"}
+    return {"msg": "User created successfully", "user_id": new_user.id}  
 
-@app.post("/token", response_model=dict)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@app.post("/login")
+async def login(username: str, password: str, db: Session = Depends(get_db)):
+   
+    user = await db.exec(select(User).where(User.username == username))
+    user = user.first()
+
     
-    user = await db.exec(select(User).where(User.username == form_data.username))
-    user = user.first() 
+    if not user or user.hashed_password != password:  
+        raise HTTPException(status_code=400, detail="Invalid credentials")
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    return {"msg": f"Welcome {user.username}!", "user_id": user.id}
 
-    access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+@app.get("/users/me/{user_id}")
+async def read_users_me(user_id: int, db: Session = Depends(get_db)):
 
-@app.get("/users/me")
-async def read_users_me(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    payload = verify_token(token, credentials_exception)
-    return {"username": payload.get("sub")}
+    user = await db.exec(select(User).where(User.id == user_id))
+    user = user.first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"username": user.username, "user_id": user.id}
+
+app.include_router(admin.router, prefix="/admin")
+app.include_router(user.router)
+app.include_router(task.router, prefix="/task")
