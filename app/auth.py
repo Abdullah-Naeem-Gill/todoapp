@@ -1,5 +1,5 @@
 
-# auth.py
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +13,8 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-# Security configuration
-SECRET_KEY = "your_secret_key"  # Change this to a strong secret key
+
+SECRET_KEY = "your_secret_key" 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -28,7 +28,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: str
 
-# Utility functions
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
