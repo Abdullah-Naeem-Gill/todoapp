@@ -1,5 +1,3 @@
-
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,11 +8,11 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+from typing import List
 
 router = APIRouter()
 
-
-SECRET_KEY = "your_secret_key" 
+SECRET_KEY = "11"  
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -27,7 +25,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: str
-
+    roles: List[str] 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -55,38 +53,42 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(username=username, roles=payload.get("roles", []))
     except JWTError:
         raise credentials_exception
     
-    user = await db.exec(select(User).where(User.username == token_data.username))
-    user = user.first()
+    result = await db.execute(select(User).where(User.username == token_data.username))
+    user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
     return user
 
 @router.post("/register", response_model=Token, tags=["Auth"])
 async def register(username: str, password: str, db: AsyncSession = Depends(get_db)):
-    existing_user = await db.exec(select(User).where(User.username == username))
-    if existing_user.first():
+    result = await db.execute(select(User).where(User.username == username))
+    existing_user = result.scalar_one_or_none()
+    
+    if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists.")
     
     hashed_password = get_password_hash(password)
     new_user = User(username=username, hashed_password=hashed_password)
+    
     db.add(new_user)
-    await db.commit()
+    await db.commit()  
     await db.refresh(new_user)
 
-    access_token = create_access_token(data={"sub": new_user.username})
+    access_token = create_access_token(data={"sub": new_user.username, "roles": []})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/token", response_model=Token, tags=["Auth"])
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    user = await db.exec(select(User).where(User.username == form_data.username))
-    user = user.first()
+    result = await db.execute(select(User).where(User.username == form_data.username))
+    user = result.scalar_one_or_none()
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    access_token = create_access_token(data={"sub": user.username})
+    roles = []  
+    access_token = create_access_token(data={"sub": user.username, "roles": roles})
     return {"access_token": access_token, "token_type": "bearer"}
