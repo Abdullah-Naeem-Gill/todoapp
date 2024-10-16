@@ -1,4 +1,3 @@
-
 from sqlmodel import SQLModel, Field, Relationship
 from typing import List, Optional
 
@@ -35,3 +34,4 @@ class TaskAssignment(SQLModel, table=True):
 
     user: "User" = Relationship(back_populates="tasks")
     task: "Task" = Relationship(back_populates="assignments")
+

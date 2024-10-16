@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 from database import get_db, init_db
 from routers import admin, user, task
